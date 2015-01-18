@@ -1,0 +1,43 @@
+BASE=ubuntu
+IMAGE=dmedit
+DATABASE=postgres
+RELEASE=$(shell cat VERSION)
+RELEASE_PREFIX=
+HOSTPORT=5487
+
+all: build
+
+build: .build
+
+.build: Dockerfile
+	docker build --rm=true -t $(IMAGE) .
+	touch .build
+
+release: releases/$(RELEASE_PREFIX)$(IMAGE)-$(RELEASE).tar.gz
+
+releases/$(RELEASE_PREFIX)$(IMAGE)-$(RELEASE).tar.gz: build VERSION
+	echo "Releasing " $(RELEASE)
+	git tag release/$(RELEASE)
+	docker tag $(IMAGE) $(RELEASE_PREFIX)$(IMAGE):$(RELEASE)
+	docker save $(RELEASE_PREFIX)$(IMAGE):$(RELEASE) > releases/$(RELEASE_PREFIX)$(IMAGE)-$(RELEASE).tar.gz
+
+base-shell:
+	docker run --rm -it $(BASE) bash
+
+start-db:
+	docker run --restart=always --name=$(DATABASE) -d postgres:9.2
+
+run: build
+	docker run --rm -it --link $(DATABASE):postgres -p $(HOSTPORT):80 $(IMAGE)
+
+shell: build
+	docker run --rm -it --link $(DATABASE):postgres -v $(PWD):/live $(IMAGE) bash
+
+devserver: .build
+	docker run --rm -it -p $(HOSTPORT):6000 --link $(DATABASE):postgres -v $(PWD):/live $(IMAGE) bash -c "/create-db.sh ; cd /live ; python /live/manage.py syncdb --settings=datamodeleditor.docker.settings ; python /live/manage.py migrate --settings=datamodeleditor.docker.settings ; python /live/manage.py runserver --settings=datamodeleditor.docker.settings 0.0.0.0:6000 ; echo done"
+
+clean:
+	$(RM) .build
+
+.PHONY: clean release shell run start-db devserver base-shell build
+
