@@ -5,7 +5,7 @@ RELEASE=$(shell cat VERSION)
 RELEASE_PREFIX=
 HOSTPORT=5487
 
-all: build
+all: build release
 
 build: .build
 
